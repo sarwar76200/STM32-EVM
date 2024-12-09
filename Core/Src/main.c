@@ -71,7 +71,7 @@ void clear_console() {
 	HD44780_Clear();
 }
 
-void show_text(int x, int y, char *text, int clear) {
+void show_text(int x, int y, const char *text, int clear) {
 	if (clear) {
 		clear_console();
 	}
@@ -90,23 +90,6 @@ void show_int(int x, int y, int64_t text, int clear) {
 	HD44780_PrintStr(str);
 }
 
-int get_sum(int n) {
-	int res = 0;
-	for (int i = 1; i <= n; ++i)
-		res += i;
-
-	return res;
-}
-
-int divisors_count(int n) {
-	int res = 0;
-	for (int i = 1; i <= n; ++i) {
-		if (n % i == 0)
-			++res;
-	}
-
-	return res;
-}
 
 #define HOME_STATE 0
 #define MENU_STATE 1
@@ -115,153 +98,195 @@ int divisors_count(int n) {
 #define COUNT_STATE 4
 #define SUCCESS_STATE 5
 #define ADMIN_LOGIN_STATE 6
+#define PUBLISH_STATE 7
+#define PROLOGUE_STATE 8
 
-int transition_stack[100] = { 0 };
+
+int admin_authorized = 0;
+
+
+int transition_stack[100] = {0};
 int stack_ptr = 1;
 
 int stack_size() {
-	return stack_ptr;
+  return stack_ptr;
 }
 int stack_top() {
-	assert(stack_size() > 0);
-	return transition_stack[stack_ptr - 1];
+  assert(stack_size() > 0);
+  return transition_stack[stack_ptr - 1];
 }
 
 void stack_push(int value) {
-	transition_stack[stack_ptr++] = value;
+  transition_stack[stack_ptr++] = value;
 }
 
 void stack_pop() {
-	if (stack_size() <= 1) {
-		return;
-	}
-	--stack_ptr;
+  if (stack_size() <= 1) {
+    return;
+  }
+  --stack_ptr;
 }
 
 void stack_reset() {
-	stack_ptr = 1;
+  stack_ptr = 1;
 }
 
-int current_state = HOME_STATE;
-const char *headings[][2] = { { "Welcome voter", "1.Vote 2.Menu" }, {
-		"Main menu", "1.Stats #.Exit" },
-		{ "Select candidate", "1.A 2.B 3.C 4.D" }, { "See stat",
-				"1.Vote count #.Exit" }, { "", "" },
-		{ "Vote Success!", "#.Exit" }, { "Admin Logged In", "1.Menu #.Exit" } };
+int current_state = PROLOGUE_STATE;
+const char* headings[][2] = {{"Welcome voter", "1.Vote #.Exit"}, {"Main menu", "1.Stats #.Exit"}, {"Select candidate", "1.A 2.B 3.C 4.D"}, {"See stat", "1.Vote count #.Exit"}, {"", ""}, {"Vote Success!", "Thank you"}, {"Admin Logged In", "1.Menu #.Exit"}, {"Voting finished", "Winner: "}, {"Pending", "Admin Login"}};
+const char* headings_admin[][2] = {{"Welcome admin", "1.Menu #.Exit"}, {"1.Stats 2.Take", "3.End vote"}, {"Select candidate", "1.A 2.B 3.C 4.D"}, {"See stat", "1.Vote count #.Exit"}, {"", ""}, {"Vote Success!", "#.Exit"}, {"Admin Logged In", "1.Menu #.Exit"}, {"Voting finished", "Winner: "}};
 
 int counts[4];
 
-void show_heading() {
-	if (current_state == COUNT_STATE) {
-		char a_label[] = "A: ";
-		char a_count[5];
-		itoa(counts[0], a_count, 10);
-		strcat(a_label, a_count);
-		show_text(0, 0, a_label, 0);
-
-		char b_label[] = "B: ";
-		char b_count[5];
-		itoa(counts[1], b_count, 10);
-		strcat(b_label, b_count);
-		show_text(8, 0, b_label, 0);
-
-		char c_label[] = "C: ";
-		char c_count[5];
-		itoa(counts[2], c_count, 10);
-		strcat(c_label, c_count);
-		show_text(0, 1, c_label, 0);
-
-		char d_label[] = "D: ";
-		char d_count[5];
-		itoa(counts[3], d_count, 10);
-		strcat(d_label, d_count);
-		show_text(8, 1, d_label, 0);
-	} else {
-		show_text(0, 0, headings[current_state][0], 0);
-		show_text(0, 1, headings[current_state][1], 0);
-	}
-
-}
-
 void cast_vote(int option) {
-	++counts[option - 1];
+  ++counts[option - 1];
 }
+char get_winner() {
+  int max_val = 0;
+  char winner = '?';
+  for (int i = 0; i < 4; ++i) {
+    if (counts[i] > max_val) {
+      max_val = counts[i];
+      winner = (char) ('A' + i);
+    }
+  }
+  return winner;
+}
+
+void reset_all() {
+  admin_authorized = 1;
+  current_state = HOME_STATE;
+  counts[0] = counts[1] = counts[2] = counts[3] = 1;
+  stack_reset();
+}
+
+void show_heading() {
+  if (current_state == PUBLISH_STATE) {
+    char winner[2] = {get_winner()};
+    char text[] = "Winner: ";
+    strcat(text, winner);
+    show_text(0, 1, text, 0);
+  } else if (current_state == COUNT_STATE) {
+    char a_label[] = "A: ";
+    char a_count[5];
+    itoa(counts[0], a_count, 10);
+    strcat(a_label, a_count);
+    show_text(0, 0, a_label, 0);
+
+    char b_label[] = "B: ";
+    char b_count[5];
+    itoa(counts[1], b_count, 10);
+    strcat(b_label, b_count);
+    show_text(8, 0, b_label, 0);
+
+    char c_label[] = "C: ";
+    char c_count[5];
+    itoa(counts[2], c_count, 10);
+    strcat(c_label, c_count);
+    show_text(0, 1, c_label, 0);
+
+    char d_label[] = "D: ";
+    char d_count[5];
+    itoa(counts[3], d_count, 10);
+    strcat(d_label, d_count);
+    show_text(8, 1, d_label, 0);
+  } else {
+    if (admin_authorized) {
+      show_text(0, 0, headings_admin[current_state][0], 0);
+      show_text(0, 1, headings_admin[current_state][1], 0);
+    } else {
+      show_text(0, 0, headings[current_state][0], 0);
+      show_text(0, 1, headings[current_state][1], 0);
+    }
+  }
+}
+
 
 void go_back() {
-	stack_pop();
-	current_state = stack_top();
+  stack_pop();
+  current_state = stack_top();
 }
 
 char key_presses[1000];
 int key_press_count = 0;
 
+
 int scan_for_admin() {
-	char pass[] = "699";
-	if (key_press_count < strlen(pass)) {
-		return 0;
-	}
-	if (key_presses[key_press_count - 1] == pass[2]
-			&& key_presses[key_press_count - 2] == pass[1]
-			&& key_presses[key_press_count - 3] == pass[0]) {
-		return 1;
-	}
-	return 0;
+  char pass[] = "699";
+  if (key_press_count < strlen(pass)) {
+    return 0;
+  }
+  if (key_presses[key_press_count - 1] == pass[2] && key_presses[key_press_count - 2] == pass[1] && key_presses[key_press_count - 3] == pass[0]) {
+    return 1;
+  }
+  return 0;
 }
 
 void transition(char key_pressed) {
-	char pressed[2] = { key_pressed };
-	show_text(15, 0, pressed, 0);
-	HAL_Delay(100);
+  char pressed[2] = {key_pressed};
+  show_text(15, 0, pressed, 0);
+  HAL_Delay(100);
 
-	char old_state = current_state;
+  char old_state = current_state;
 
-	if (scan_for_admin()) {
-		current_state = ADMIN_LOGIN_STATE;
-		clear_console();
-		stack_reset();
-	}
+  if (scan_for_admin()) {
+    current_state = HOME_STATE;
+    admin_authorized = 1;
+    clear_console();
+    stack_reset();
+    return;
+  }
 
-	if (key_pressed == '?') {
-		exit(0);
-	}
-	if (key_pressed == '*') {
-		go_back();
-		clear_console();
-		return;
-	}
+  if (key_pressed == '?') {
+    exit(0);
+    return;
+  }
+  if (key_pressed == '*') {
+    if (current_state == SUCCESS_STATE || current_state == PROLOGUE_STATE) return;
+    go_back();
+    clear_console();
+    return;
+  }
 
-	if (key_pressed == '#') {
-		current_state = HOME_STATE;
-		clear_console();
-		stack_reset();
-		return;
-	}
-	if (current_state == HOME_STATE) {
-		if (key_pressed == '1') {
-			current_state = VOTE_STATE;
-		} else if (key_pressed == '2') {
-			current_state = MENU_STATE;
-		}
-	} else if (current_state == MENU_STATE) {
-		if (key_pressed == '1') {
-			current_state = STAT_STATE;
-		} else if (key_pressed == '#') {
-			current_state = HOME_STATE;
-		}
-	} else if (current_state == VOTE_STATE) {
-		cast_vote(key_pressed - '0');
-		current_state = SUCCESS_STATE;
+  if (key_pressed == '#') {
+    if (current_state != PROLOGUE_STATE && current_state != SUCCESS_STATE) {
+      current_state = HOME_STATE;
+    }
+    clear_console();
+    stack_reset();
+    return;
+  }
+  if (current_state == HOME_STATE) {
+    if (key_pressed == '1') {
+      current_state = admin_authorized ? MENU_STATE : VOTE_STATE;
+    } else if (key_pressed == '#') {
+      current_state = HOME_STATE;
+    }
+  } else if (current_state == MENU_STATE) {
+    if (key_pressed == '1') {
+      current_state = STAT_STATE;
+    } else if (key_pressed == '#') {
+      current_state = HOME_STATE;
+    } else if (key_pressed == '2') {
+      current_state = HOME_STATE;
+      admin_authorized = 0;
+    } else if (key_pressed == '3') {
+      current_state = PUBLISH_STATE;
+    }
+  } else if (current_state == VOTE_STATE) {
+    cast_vote(key_pressed - '0');
+    current_state = SUCCESS_STATE;
 
-	} else if (current_state == STAT_STATE) {
-		if (key_pressed == '1') {
-			current_state = COUNT_STATE;
-		} else if (key_pressed == '#') {
-			current_state = HOME_STATE;
-		}
-	}
-	stack_push(current_state);
-	if (current_state != old_state)
-		clear_console();
+  } else if (current_state == STAT_STATE) {
+    if (key_pressed == '1') {
+      current_state = COUNT_STATE;
+    } else if (key_pressed == '#') {
+      current_state = HOME_STATE;
+    }
+  }
+  stack_push(current_state);
+  if (current_state != old_state) {
+    clear_console();
+  }
 }
 
 /* USER CODE END 0 */
@@ -303,59 +328,10 @@ int main(void) {
 	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_4, 1);
 	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, 1);
 
-//  show_text(0, 0, "HELLO", 0);
-//  show_text(10, 1, "HELLO", 0);
-
-//  HAL_Delay(2000);
-//
-//  HD44780_Clear();
-//  HD44780_SetCursor(0,0);
-//  HD44780_PrintStr("HELLO");
-//  HAL_Delay(2000);
-//  HD44780_NoBacklight();
-//  HAL_Delay(2000);
-//  HD44780_Backlight();
-//
-//  HAL_Delay(2000);
-//  HD44780_Cursor();
-//  HAL_Delay(2000);
-//  HD44780_Blink();
-//  HAL_Delay(5000);
-//  HD44780_NoBlink();
-//  HAL_Delay(2000);
-//  HD44780_NoCursor();
-//  HAL_Delay(2000);
-//
-//  HD44780_NoDisplay();
-//  HAL_Delay(2000);
-//  HD44780_Display();
-//
-//  HD44780_Clear();
-//  HD44780_SetCursor(0,0);
-//  HD44780_PrintStr("Learning STM32 with LCD is fun :-)");
-//  int x;
-//  for(int x=0; x<40; x=x+1)
-//  {
-//    HD44780_ScrollDisplayLeft();  //HD44780_ScrollDisplayRight();
-//    HAL_Delay(500);
-//  }
-//
-//  char snum[5];
-//  for ( int x = 1; x <= 200 ; x++ )
-//  {
-//    itoa(x, snum, 10);
-//    HD44780_Clear();
-//    HD44780_SetCursor(0,0);
-//    HD44780_PrintStr(snum);
-//    HAL_Delay (1000);
-//  }
-
 	/* USER CODE END 2 */
 
 	/* Infinite loop */
 	/* USER CODE BEGIN WHILE */
-//  srand(time(0));
-//	HAL_Delay(600);
 	while (1) {
 		show_heading();
 		char c = keyPressed;
@@ -364,16 +340,9 @@ int main(void) {
 			transition(c);
 			last_when_pressed = currentMillis;
 		}
-
-//	  clear_console();
-//	  int key = keyPressed;
-//	  char num[2] = {key};
-
-//	  show_text(0, 0, num, 0);
-		/* USER CODE END WHILE */
-
-		/* USER CODE BEGIN 3 */
 	}
+	/* USER CODE END WHILE */
+	/* USER CODE BEGIN 3 */
 	/* USER CODE END 3 */
 }
 
