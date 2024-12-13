@@ -18,10 +18,11 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include <math.h>
 #include <assert.h>
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
+
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "liquidcrystal_i2c.h"
@@ -111,6 +112,7 @@ float RH = 0;
 #define PUBLISH_STATE 7
 #define PROLOGUE_STATE 8
 #define TEMPERATURE_STATE 9
+#define CONFIRMATION_STATE 10
 
 int admin_authorized = 0;
 
@@ -146,7 +148,8 @@ const char *headings[][2] = { { "Welcome voter", "1.Vote #.Exit" }, {
 		{ "Select candidate", "1.A 2.B 3.C 4.D" }, { "See stat",
 				"1.Vote count #.Exit" }, { "", "" }, { "Vote Success!",
 				"Thank you" }, { "Admin Logged In", "1.Menu #.Exit" }, {
-				"Voting finished", "Winner: " }, { "Pending", "Admin Login" } };
+				"Voting finished", "Winner: " }, { "Pending", "Admin Login" }, {
+				"", "" }, { "", "1. Yes *. Back" } };
 const char *headings_admin[][2] = { { "Welcome admin", "1.Menu #.Exit" }, {
 		"1.Stats 2.Take", "3.End 4.Temp" }, { "Select candidate",
 		"1.A 2.B 3.C 4.D" }, { "See stat", "1.Vote count #.Exit" }, { "", "" },
@@ -154,6 +157,7 @@ const char *headings_admin[][2] = { { "Welcome admin", "1.Menu #.Exit" }, {
 				"Voting finished", "Winner: " }, { "Temp: ", "Humidity: " } };
 
 int counts[4];
+int selected_candidate = 0;
 
 void cast_vote(int option) {
 	++counts[option - 1];
@@ -213,7 +217,15 @@ void ftoa(float n, char *res, int afterpoint) {
 }
 
 void show_heading() {
-	if (current_state == TEMPERATURE_STATE) {
+	if (current_state == CONFIRMATION_STATE) {
+		char conf_text[50] = "Vote: ";
+		char selected[2] = { (char) (selected_candidate + '0') };
+		strcat(conf_text, selected);
+		strcat(conf_text, "?");
+		show_text(0, 0, conf_text, 0);
+		show_text(0, 1, headings[current_state][1], 0);
+
+	} else if (current_state == TEMPERATURE_STATE) {
 		char temp_text[50] = "Temp: ";
 		char temp[30];
 		ftoa(tCelsius, temp, 1);
@@ -223,7 +235,7 @@ void show_heading() {
 
 		char hmd_text[50] = "Humidity: ";
 		char hmd[30];
-		itoa((int)RH, hmd, 10);
+		itoa((int) RH, hmd, 10);
 		strcat(hmd_text, hmd);
 		strcat(hmd_text, " %");
 		show_text(0, 1, hmd_text, 0);
@@ -344,8 +356,8 @@ void transition(char key_pressed) {
 			current_state = TEMPERATURE_STATE;
 		}
 	} else if (current_state == VOTE_STATE) {
-		cast_vote(key_pressed - '0');
-		current_state = SUCCESS_STATE;
+		selected_candidate = key_pressed - '0';
+		current_state = CONFIRMATION_STATE;
 
 	} else if (current_state == STAT_STATE) {
 		if (key_pressed == '1') {
@@ -353,6 +365,12 @@ void transition(char key_pressed) {
 		} else if (key_pressed == '#') {
 			current_state = HOME_STATE;
 		}
+	} else if (current_state == CONFIRMATION_STATE) {
+		if (key_pressed == '1') {
+			cast_vote(selected_candidate);
+			current_state = SUCCESS_STATE;
+		}
+
 	}
 	stack_push(current_state);
 	if (current_state != old_state) {
@@ -374,13 +392,13 @@ uint8_t DHT11_Start(void) {
 	GPIO_InitStructPrivate.Speed = GPIO_SPEED_FREQ_LOW;
 	GPIO_InitStructPrivate.Pull = GPIO_NOPULL;
 	HAL_GPIO_Init(DHT11_PORT, &GPIO_InitStructPrivate); // set the pin as output
-	HAL_GPIO_WritePin(DHT11_PORT, DHT11_PIN, 0);   // pull the pin low
-	HAL_Delay(20);   // wait for 20ms
-	HAL_GPIO_WritePin(DHT11_PORT, DHT11_PIN, 1);   // pull the pin high
-	microDelay(30);   // wait for 30us
+	HAL_GPIO_WritePin(DHT11_PORT, DHT11_PIN, 0);       // pull the pin low
+	HAL_Delay(20);                                     // wait for 20ms
+	HAL_GPIO_WritePin(DHT11_PORT, DHT11_PIN, 1);       // pull the pin high
+	microDelay(30);                                    // wait for 30us
 	GPIO_InitStructPrivate.Mode = GPIO_MODE_INPUT;
 	GPIO_InitStructPrivate.Pull = GPIO_PULLUP;
-	HAL_GPIO_Init(DHT11_PORT, &GPIO_InitStructPrivate); // set the pin as input
+	HAL_GPIO_Init(DHT11_PORT, &GPIO_InitStructPrivate);  // set the pin as input
 	microDelay(40);
 	if (!(HAL_GPIO_ReadPin(DHT11_PORT, DHT11_PIN))) {
 		microDelay(80);
@@ -401,18 +419,18 @@ uint8_t DHT11_Read(void) {
 		pMillis = HAL_GetTick();
 		cMillis = HAL_GetTick();
 		while (!(HAL_GPIO_ReadPin(DHT11_PORT, DHT11_PIN))
-				&& pMillis + 2 > cMillis) {  // wait for the pin to go high
+				&& pMillis + 2 > cMillis) {       // wait for the pin to go high
 			cMillis = HAL_GetTick();
 		}
-		microDelay(40);   // wait for 40 us
-		if (!(HAL_GPIO_ReadPin(DHT11_PORT, DHT11_PIN)))   // if the pin is low
+		microDelay(40);                                // wait for 40 us
+		if (!(HAL_GPIO_ReadPin(DHT11_PORT, DHT11_PIN)))     // if the pin is low
 			b &= ~(1 << (7 - a));
 		else
 			b |= (1 << (7 - a));
 		pMillis = HAL_GetTick();
 		cMillis = HAL_GetTick();
 		while ((HAL_GPIO_ReadPin(DHT11_PORT, DHT11_PIN))
-				&& pMillis + 2 > cMillis) {  // wait for the pin to go low
+				&& pMillis + 2 > cMillis) {        // wait for the pin to go low
 			cMillis = HAL_GetTick();
 		}
 	}
@@ -474,15 +492,15 @@ int main(void) {
 			last_when_pressed = currentMillis;
 		}
 
-//		if (current_state == TEMPERATURE_STATE) {
-//				HAL_Delay(1000);
-//		}
+		//		if (current_state == TEMPERATURE_STATE) {
+		//				HAL_Delay(1000);
+		//		}
 		if (DHT11_Start()) {
-			RHI = DHT11_Read(); // Relative humidity integral
-			RHD = DHT11_Read(); // Relative humidity decimal
-			TCI = DHT11_Read(); // Celsius integral
-			TCD = DHT11_Read(); // Celsius decimal
-			SUM = DHT11_Read(); // Check sum
+			RHI = DHT11_Read();        // Relative humidity integral
+			RHD = DHT11_Read();        // Relative humidity decimal
+			TCI = DHT11_Read();        // Celsius integral
+			TCD = DHT11_Read();        // Celsius decimal
+			SUM = DHT11_Read();        // Check sum
 			if (RHI + RHD + TCI + TCD == SUM) {
 				// Can use RHI and TCI for any purposes if whole number only needed
 				tCelsius = (float) TCI + (float) (TCD / 10.0);
@@ -490,7 +508,6 @@ int main(void) {
 				RH = (float) RHI + (float) (RHD / 10.0);
 				// Can use tCelsius, tFahrenheit and RH for any purposes
 			}
-
 		}
 	}
 	/* USER CODE END WHILE */
@@ -564,7 +581,6 @@ static void MX_I2C2_Init(void) {
 	/* USER CODE BEGIN I2C2_Init 2 */
 
 	/* USER CODE END I2C2_Init 2 */
-
 }
 
 /**
@@ -607,7 +623,6 @@ static void MX_TIM1_Init(void) {
 	/* USER CODE BEGIN TIM1_Init 2 */
 
 	/* USER CODE END TIM1_Init 2 */
-
 }
 
 /**
@@ -678,16 +693,16 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
 		HAL_GPIO_WritePin(GPIOB, GPIO_PIN_4, 0);
 		HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, 0);
 		if (GPIO_Pin == GPIO_PIN_6 && HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_6)) {
-			keyPressed = 68; //ASCII value of D
+			keyPressed = 68;        //ASCII value of D
 		} else if (GPIO_Pin == GPIO_PIN_7
 				&& HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_7)) {
-			keyPressed = 67; //ASCII value of C
+			keyPressed = 67;        //ASCII value of C
 		} else if (GPIO_Pin == GPIO_PIN_8
 				&& HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_8)) {
-			keyPressed = 66; //ASCII value of B
+			keyPressed = 66;        //ASCII value of B
 		} else if (GPIO_Pin == GPIO_PIN_9
 				&& HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_9)) {
-			keyPressed = 65; //ASCII value of A
+			keyPressed = 65;        //ASCII value of A
 		}
 
 		HAL_GPIO_WritePin(GPIOA, GPIO_PIN_15, 0);
@@ -695,16 +710,16 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
 		HAL_GPIO_WritePin(GPIOB, GPIO_PIN_4, 0);
 		HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, 0);
 		if (GPIO_Pin == GPIO_PIN_6 && HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_6)) {
-			keyPressed = 35; //ASCII value of #
+			keyPressed = 35;        //ASCII value of #
 		} else if (GPIO_Pin == GPIO_PIN_7
 				&& HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_7)) {
-			keyPressed = 57; //ASCII value of 9
+			keyPressed = 57;        //ASCII value of 9
 		} else if (GPIO_Pin == GPIO_PIN_8
 				&& HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_8)) {
-			keyPressed = 54; //ASCII value of 6
+			keyPressed = 54;        //ASCII value of 6
 		} else if (GPIO_Pin == GPIO_PIN_9
 				&& HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_9)) {
-			keyPressed = 51; //ASCII value of 3
+			keyPressed = 51;        //ASCII value of 3
 		}
 
 		HAL_GPIO_WritePin(GPIOA, GPIO_PIN_15, 0);
@@ -712,16 +727,16 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
 		HAL_GPIO_WritePin(GPIOB, GPIO_PIN_4, 1);
 		HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, 0);
 		if (GPIO_Pin == GPIO_PIN_6 && HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_6)) {
-			keyPressed = 48; //ASCII value of 0
+			keyPressed = 48;        //ASCII value of 0
 		} else if (GPIO_Pin == GPIO_PIN_7
 				&& HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_7)) {
-			keyPressed = 56; //ASCII value of 8
+			keyPressed = 56;        //ASCII value of 8
 		} else if (GPIO_Pin == GPIO_PIN_8
 				&& HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_8)) {
-			keyPressed = 53; //ASCII value of 5
+			keyPressed = 53;        //ASCII value of 5
 		} else if (GPIO_Pin == GPIO_PIN_9
 				&& HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_9)) {
-			keyPressed = 50; //ASCII value of 2
+			keyPressed = 50;        //ASCII value of 2
 		}
 
 		HAL_GPIO_WritePin(GPIOA, GPIO_PIN_15, 0);
@@ -729,16 +744,16 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
 		HAL_GPIO_WritePin(GPIOB, GPIO_PIN_4, 0);
 		HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, 1);
 		if (GPIO_Pin == GPIO_PIN_6 && HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_6)) {
-			keyPressed = 42; //ASCII value of *
+			keyPressed = 42;        //ASCII value of *
 		} else if (GPIO_Pin == GPIO_PIN_7
 				&& HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_7)) {
-			keyPressed = 55; //ASCII value of 7
+			keyPressed = 55;        //ASCII value of 7
 		} else if (GPIO_Pin == GPIO_PIN_8
 				&& HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_8)) {
-			keyPressed = 52; //ASCII value of 4
+			keyPressed = 52;        //ASCII value of 4
 		} else if (GPIO_Pin == GPIO_PIN_9
 				&& HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_9)) {
-			keyPressed = 49; //ASCII value of 1
+			keyPressed = 49;        //ASCII value of 1
 		}
 
 		HAL_GPIO_WritePin(GPIOA, GPIO_PIN_15, 1);
@@ -768,7 +783,7 @@ void Error_Handler(void) {
 	/* USER CODE END Error_Handler_Debug */
 }
 
-#ifdef  USE_FULL_ASSERT
+#ifdef USE_FULL_ASSERT
 /**
   * @brief  Reports the name of the source file and the source line number
   *         where the assert_param error has occurred.
@@ -776,11 +791,10 @@ void Error_Handler(void) {
   * @param  line: assert_param error line source number
   * @retval None
   */
-void assert_failed(uint8_t *file, uint32_t line)
-{
-  /* USER CODE BEGIN 6 */
-  /* User can add his own implementation to report the file name and line number,
+void assert_failed(uint8_t *file, uint32_t line) {
+    /* USER CODE BEGIN 6 */
+    /* User can add his own implementation to report the file name and line number,
      ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
-  /* USER CODE END 6 */
+    /* USER CODE END 6 */
 }
 #endif /* USE_FULL_ASSERT */
