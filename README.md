@@ -48,9 +48,14 @@ The system uses a Nondeterministic Finite Automata (NFA) to manage state transit
 The NFA handles transitions for voters and admins separately.
 
 - **Voter NFA States**: Transitions include Home → Vote → Confirmation → Success, with back/exit options (*, #).
+
+<img src="./assets/img/voter.png" alt="Circuit Diagram" width="400px">
+
+<br>
+
 - **Admin NFA States**: Transitions include Home → Menu → Stats/Count/Publish/Temperature, with navigation options.
 
-(For visual diagrams, refer to Fig 1: Transition between Voter NFA states and Fig 2: Transition between Admin NFA states in the project report PDF.)
+<img src="./assets/img/admin.png" alt="Circuit Diagram" width="400px">
 
 ## Overall System Flow
 
@@ -64,11 +69,13 @@ The NFA handles transitions for voters and admins separately.
 
 ## Circuit Diagram
 
-(Refer to Fig 3: Circuit Diagram of the EVM system in the project report PDF.)
+<img src="./assets/img/circuit.jpg" alt="Circuit Diagram" width="400px">
 
-## Hardware Picture
 
-(Refer to Fig 4: A picture of the circuit with the components in the project report PDF.)
+## Finished Project
+
+<img src="./assets/img/hardware.jpg" alt="Hardware Diagram" width="400px">
+
 
 ## Installation and Setup
 
@@ -101,4 +108,4 @@ Some unexpected behaviors were noted due to a faulty keypad; replacing it resolv
 
 This project demonstrates a reliable EVM using an STM32 microcontroller, with NFA for structured state management and an intuitive LCD/keypad interface. It is scalable and can be extended with features like wireless communication or biometric authentication.
 
-For the full project report, refer to the attached PDF in the repository.
+For the full project report, refer to the attached `Project Report.pdf` in the repository.
